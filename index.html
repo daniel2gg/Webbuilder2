@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Droidgine html creations</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #eee; padding: 5px; z-index: 1000; }
+    .panel { position: fixed; bottom: 0; left: 0; right: 0; background: #eee; padding: 5px; font-size: 14px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 5px; }
+    .panel input, .panel select { width: 100px; }
+    .draggable { position: absolute; cursor: move; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="addElement('button')">+ Button</button>
+    <button onclick="addElement('text')">+ Text</button>
+    <button onclick="addElement('img')">+ Image</button>
+    <button onclick="addElement('select')">+ Dropdown</button>
+    <button onclick="addElement('edittext')">+ EditText</button>
+    Mode: 
+    <select id="modeSelect" onchange="setMode(this.value)">
+      <option value="editor">Editor</option>
+      <option value="test">Test</option>
+    </select>
+    <button onclick="exportHTML()">Export</button>
+  </div>
+  <div class="panel">
+    ID: <input id="idInput">
+    X: <input id="xInput" type="number">
+    Y: <input id="yInput" type="number">
+    Text/Src/Options: <input id="textInput">
+    Script: <input id="scriptInput">
+    Hint: <input id="prop-hint">
+    <button onclick="updateProperties()">Apply</button>
+    <button onclick="deleteElement()">Delete</button>
+  </div>
+
+  <script>
+    let selected = null;
+    let mode = "editor";
+
+    function setMode(m) {
+      mode = m;
+      document.querySelectorAll('.draggable').forEach(el => {
+        const type = el.dataset.type;
+        if (mode === "editor") {
+          el.contentEditable = false;
+          el.onmousedown = dragStart;
+          if (type === 'select') {
+            el.innerHTML = el.dataset.options?.split(',').map(opt => `<button disabled>${opt}</button>`).join(' ');
+          }
+        } else {
+          el.onmousedown = null;
+          if (type === 'select') {
+            const sel = document.createElement('select');
+            sel.style.left = el.style.left;
+            sel.style.top = el.style.top;
+            sel.className = 'draggable';
+            sel.dataset.type = 'select';
+            sel.dataset.options = el.dataset.options;
+            sel.dataset.id = el.dataset.id;
+            sel.dataset.script = el.dataset.script;
+            el.replaceWith(sel);
+            sel.innerHTML = sel.dataset.options?.split(',').map(opt => `<option>${opt}</option>`).join('');
+            if (sel.dataset.script) sel.onchange = () => eval(sel.dataset.script);
+            sel.onclick = () => selectElement(sel);
+          }
+        }
+      });
+    }
+
+    function addElement(type) {
+      const el = document.createElement(type === 'text' ? 'div' : type === 'edittext' ? 'input' : type);
+      el.className = "draggable";
+      el.style.left = "100px";
+      el.style.top = "100px";
+      el.dataset.type = type;
+      el.dataset.id = "elem" + Date.now();
+
+      if (type === 'button') el.innerText = "Button";
+      if (type === 'text') el.innerText = "Text";
+      if (type === 'img') el.src = "orangjoget.png";
+      if (type === 'select') {
+        el.dataset.options = "Option 1,Option 2";
+        el.innerHTML = `<button disabled>Option 1</button><button disabled>Option 2</button>`;
+      }
+      if (type === 'edittext') {
+        el.placeholder = "Type here";
+      }
+
+      el.onmousedown = dragStart;
+      el.onclick = () => selectElement(el);
+      document.body.appendChild(el);
+      selectElement(el);
+    }
+
+    function selectElement(el) {
+      selected = el;
+      idInput.value = el.dataset.id || "";
+      xInput.value = parseInt(el.style.left) || 0;
+      yInput.value = parseInt(el.style.top) || 0;
+      textInput.value = el.dataset.type === 'img' ? el.src :
+                        el.dataset.type === 'select' ? el.dataset.options :
+                        el.innerText || el.value || "";
+      scriptInput.value = el.dataset.script || "";
+      document.getElementById("prop-hint").value = el.placeholder || "";
+    }
+
+    function updateProperties() {
+      if (!selected) return;
+      selected.dataset.id = idInput.value;
+      selected.style.left = xInput.value + "px";
+      selected.style.top = yInput.value + "px";
+      selected.dataset.script = scriptInput.value;
+
+      if (selected.dataset.type === 'button' || selected.dataset.type === 'text') {
+        selected.innerText = textInput.value;
+      } else if (selected.dataset.type === 'img') {
+        selected.src = textInput.value;
+      } else if (selected.dataset.type === 'select') {
+        selected.dataset.options = textInput.value;
+        selected.innerHTML = textInput.value.split(',').map(o => `<button disabled>${o}</button>`).join('');
+      } else if (selected.dataset.type === 'edittext') {
+        selected.value = textInput.value;
+        selected.placeholder = document.getElementById("prop-hint").value;
+      }
+    }
+
+    function deleteElement() {
+      if (selected) {
+        selected.remove();
+        selected = null;
+      }
+    }
+
+    let offsetX, offsetY;
+    function dragStart(e) {
+      if (mode !== 'editor') return;
+      offsetX = e.offsetX;
+      offsetY = e.offsetY;
+      const el = e.target;
+      const move = ev => {
+        el.style.left = (ev.pageX - offsetX) + "px";
+        el.style.top = (ev.pageY - offsetY) + "px";
+        selectElement(el);
+      };
+      const up = () => {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    }
+
+    function exportHTML() {
+      const elements = document.querySelectorAll('.draggable');
+      let bodyContent = '';
+      elements.forEach(el => {
+        const type = el.dataset.type;
+        const x = el.style.left;
+        const y = el.style.top;
+        const id = el.dataset.id || '';
+        const script = el.dataset.script || '';
+        const hint = el.placeholder || '';
+        let htmlEl = '';
+
+        if (type === 'button') {
+          htmlEl = `<button class="draggable" style="left: ${x}; top: ${y};" data-id="${id}" data-script="${script}">${el.innerText}</button>`;
+        } else if (type === 'text') {
+          htmlEl = `<div class="draggable" style="left: ${x}; top: ${y};" data-id="${id}">${el.innerText}</div>`;
+        } else if (type === 'img') {
+          htmlEl = `<img src="${el.src}" class="draggable" style="left: ${x}; top: ${y};" data-id="${id}">`;
+        } else if (type === 'select') {
+          let opts = el.options ? [...el.options].map(o => `<option>${o.text}</option>`).join('') : '';
+          htmlEl = `<select class="draggable" style="left: ${x}; top: ${y};" data-id="${id}" data-script="${script}">${opts}</select>`;
+        } else if (type === 'edittext') {
+          htmlEl = `<input class="draggable" style="left: ${x}; top: ${y};" data-id="${id}" value="${el.value}" placeholder="${hint}">`;
+        }
+
+        bodyContent += htmlEl + '\n';
+      });
+
+      const result = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Exported GUI</title>
+  <style>
+    body { margin: 0; }
+    .draggable { position: absolute; }
+  </style>
+</head>
+<body>
+${bodyContent}
+<script>
+document.querySelectorAll('[data-script]').forEach(el => {
+  const code = el.getAttribute('data-script');
+  if (!code) return;
+  if (el.tagName === 'BUTTON') {
+    el.addEventListener('click', () => eval(code));
+  } else if (el.tagName === 'SELECT') {
+    el.addEventListener('change', () => eval(code));
+  }
+});
+<\/script>
+</body>
+</html>`;
+      prompt("Copy exported HTML:", result);
+    }
+  </script>
+</body>
+  </html>
